@@ -177,12 +177,17 @@ class TrainLoop:
     def forward_backward(self, batch, batch_cons):
         self.mp_trainer.zero_grad()
         for i in range(0, batch.shape[0], self.microbatch):
+            print("batch: {}/{}, step: {}".format(i, batch.shape[0], self.microbatch))
             micro = batch[i : i + self.microbatch].to(dist_util.dev())
             micro_cons = batch_cons[i : i + self.microbatch].to(dist_util.dev())
 
             last_batch = (i + self.microbatch) >= batch.shape[0]
             t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
 
+            print("  micro     : {}, {} ({:.2f}, {:.2f})".format(micro.shape, micro.dtype, micro.min().item(), micro.max().item()))
+            print("  micro_cons: {}, {} ({:.2f}, {:.2f})".format(micro_cons.shape, micro_cons.dtype, micro_cons.min().item(), micro_cons.max().item()))
+            print("  t         : {}, {} ({:.2f}, {:.2f})".format(t.shape, t.dtype, t.min().item(), t.max().item()))
+            print("  weights   : {}, {} ({:.2f}, {:.2f})".format(weights.shape, weights.dtype, weights.min().item(), weights.max().item()))
             compute_losses = functools.partial(
                 self.diffusion.training_losses,
                 self.ddp_model,
@@ -190,7 +195,6 @@ class TrainLoop:
                 micro_cons,
                 t
             )
-
             if last_batch or not self.use_ddp:
                 losses = compute_losses()
             else:

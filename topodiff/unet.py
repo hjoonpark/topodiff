@@ -18,6 +18,8 @@ from .nn import (
     timestep_embedding,
 )
 
+import matplotlib.pyplot as plt
+import os
 
 class AttentionPool2d(nn.Module):
     """
@@ -447,7 +449,7 @@ class UNetModel(nn.Module):
         use_new_attention_order=False,
     ):
         super().__init__()
-
+        print("UNetModel init ----------")
         if num_heads_upsample == -1:
             num_heads_upsample = num_heads
 
@@ -644,23 +646,45 @@ class UNetModel(nn.Module):
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
+        print("========================= UNetModel forward ========================")
+        print("input x: {} ({:.2f}, {:.2f})".format(x.shape, x.min().item(), x.max().item()))
+        print("input timesteps: {} ({:.2f}, {:.2f})".format(timesteps.shape, timesteps.min().item(), timesteps.max().item()))
+        print("self.model_channels: {}".format(self.model_channels))
+
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-
+        print("emb: {} ({:.2f}, {:.2f})".format(emb.shape, emb.min().item(), emb.max().item()))
+        print("self.num_classes:", self.num_classes)
         if self.num_classes is not None:
             assert y.shape == (x.shape[0],)
             emb = emb + self.label_emb(y)
 
         h = x.type(self.dtype)
-        for module in self.input_blocks:
+        for i, module in enumerate(self.input_blocks):
+            print("\n>> input module {}".format(i))
+            # print(module)
+            print("  input h: {}, emb: {}".format(h.shape, emb.shape))
             h = module(h, emb)
+            print("  output h: {}".format(h.shape))
             hs.append(h)
+        print(">> middle_block")
+        # print(self.middle_block)
+
+        print("  input h: {}, emb: {}".format(h.shape, emb.shape))
         h = self.middle_block(h, emb)
-        for module in self.output_blocks:
+        print("  output h: {}".format(h.shape))
+        for i, module in enumerate(self.output_blocks):
+            print("\n>> output module {}".format(i))
+            # print(module)
             h = th.cat([h, hs.pop()], dim=1)
+            print("  input h: {}, emb: {}".format(h.shape, emb.shape))
             h = module(h, emb)
+            print("  output h: {}".format(h.shape))
         h = h.type(x.dtype)
-        return self.out(h)
+        h = self.out(h)
+        print("  final output h: {} ({:.2f}, {:.2f})".format(h.shape, h.min().item(), h.max().item()))
+        print("====================================================================")
+        return h
 
 
 class SuperResModel(UNetModel):
@@ -672,6 +696,7 @@ class SuperResModel(UNetModel):
 
     def __init__(self, image_size, in_channels, *args, **kwargs):
         super().__init__(image_size, in_channels * 2, *args, **kwargs)
+        print("SuperResModel init ----------")
 
     def forward(self, x, timesteps, low_res=None, **kwargs):
         _, _, new_height, new_width = x.shape
@@ -710,6 +735,7 @@ class EncoderUNetModel(nn.Module):
         pool="adaptive",
     ):
         super().__init__()
+        print("EncoderUNetModel init ----------")
 
         if num_heads_upsample == -1:
             num_heads_upsample = num_heads

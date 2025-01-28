@@ -19,6 +19,11 @@ from topodiff.train_util import TrainLoop
 def main():
     args = create_argparser().parse_args()
 
+    print("args ================================")
+    for k, v in vars(args).items():
+        print("  {}: {}".format(k, v))
+
+    print("=====================================")
     dist_util.setup_dist()
     logger.configure()
 
@@ -28,6 +33,10 @@ def main():
     )
     model.to(dist_util.dev())
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
+    # print(model)
+
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print("Trainable parameters: {:,}".format(n_params))
 
     logger.log("creating data loader...")
     data = load_data(

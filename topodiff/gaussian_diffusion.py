@@ -9,7 +9,7 @@ https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0
 
 import enum
 import math
-
+import os
 import numpy as np
 import torch as th
 
@@ -203,11 +203,12 @@ class GaussianDiffusion:
         if noise is None:
             noise = th.randn_like(x_start)
         assert noise.shape == x_start.shape
-        return (
-            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-            + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+
+        out = _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start \
+            + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) \
             * noise
-        )
+        print("q_sample: {}, ({:.2f}, {:.2f})".format(out.shape, out.min().item(), out.max().item()))
+        return (out)
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """
@@ -616,14 +617,18 @@ class GaussianDiffusion:
         :return: a dict with the key "loss" containing a tensor of shape [N].
                  Some mean or variance settings may also have other keys.
         """
+        print("----- training_losses --------------------")
+        print("self.loss_type: {}".format(self.loss_type))
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start)
         x_t = self.q_sample(x_start, t, noise=noise)
-
+        print("self.q_sample({}, {}, {}) = {}".format(x_start.shape, t.shape, noise.shape, x_t.shape))
+        print("x_t:", x_t.shape, x_t.min().item(), x_t.max().item())
         terms = {}
 
+        print("self.loss_type:", self.loss_type)
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
             terms["loss"] = self._vb_terms_bpd(
                 model=model,
@@ -639,7 +644,8 @@ class GaussianDiffusion:
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
             full_arr = th.cat((x_t, cons), dim = 1)
             model_output = model(full_arr, self._scale_timesteps(t), **model_kwargs)
-
+            print("self.model_var_type:" ,self.model_var_type)
+            print(">>> model_output:", model_output.shape)
             if self.model_var_type in [
                 ModelVarType.LEARNED,
                 ModelVarType.LEARNED_RANGE,
@@ -671,6 +677,22 @@ class GaussianDiffusion:
                 ModelMeanType.EPSILON: noise,
             }[self.model_mean_type]
             assert model_output.shape == target.shape == x_start.shape
+            
+            print("self.model_mean_type:", self.model_mean_type)
+            print("target:", target.shape)
+
+            # save_dir = "output"
+            # for b in range(3):
+            #     I = target[b, :, :, :].detach().permute(2,1,0).cpu().numpy()
+            #     fig = plt.figure()
+            #     plt.imshow(I, cmap='gray')
+            #     plt.title("{}".format(b))
+            #     plt.tight_layout()
+            #     save_path = os.path.join(save_dir, "UNet_target_{}.jpg".format(b))
+            #     plt.savefig(save_path, dpi=150)
+            #     print(save_path)
+                
+            assert 0
             terms["mse"] = mean_flat((target - model_output) ** 2)
             if "vb" in terms:
                 terms["loss"] = terms["mse"] + terms["vb"]
